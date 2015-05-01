@@ -6,6 +6,10 @@ import Data.Monoid
 import Data.Foldable (foldMap)
 import Data.Tree
 import Data.Maybe
+import Control.Monad
+
+
+a = Directory 3 [File 4, Directory 5 [File 5, Directory 3 [File 1]]]  
 
 data Filesystem a = File a | Directory a [Filesystem a] deriving (Show)
 
