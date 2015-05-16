@@ -6,6 +6,7 @@ import Data.Monoid
 import Data.Foldable (foldMap)
 import Data.Tree
 import Data.Maybe
+import Control.Monad
 
 data Sample a = Sample { x :: [a], y :: a } deriving (Show)
 data Hypothesis a = Hypothesis { c :: [a] } deriving (Show)
