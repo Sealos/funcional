@@ -40,6 +40,8 @@ nfa0 = NFA {
              states = DS.fromList $ fmap Node [0..3],
              moves  = DS.fromList [
                Move { from = Node 0, to = Node 0, sym = 'a' },
+               Lambda { from = Node 0, to = Node 3 },
+               Lambda { from = Node 0, to = Node 1 },
                Move { from = Node 0, to = Node 0, sym = 'a' },
                Move { from = Node 0, to = Node 1, sym = 'a' },
                Move { from = Node 1, to = Node 2, sym = 'b' },
@@ -50,27 +52,46 @@ nfa0 = NFA {
            }
 
 instance Arbitrary NFANode where
-  arbitrary = undefined
+  arbitrary = return . Node . getPositive =<< arbitrary
 
 instance Arbitrary NFA where
-  arbitrary = undefined
+  arbitrary = sized $ \n ->
+                let
+                  sigmaGen  = choose ('a', 'z')
+                  statesGen = vectorOf n (arbitrary::Gen (NFANode))
+                  movesGen  = undefined
+                  initial   = Node 0
+                  final     = undefined
+              in undefined
 
 
 isValid :: NFA -> Bool
 isValid = undefined
 
-isMove, isLambda :: Transition -> Bool
-isMove   = undefined
-isLambda = undefined
+isMove :: Transition -> Bool
+isMove = not . isLambda
+
+isLambda :: Transition -> Bool
+isLambda (Lambda _ _) = True
+isLambda _            = False
 
 lambdaMoves :: NFA -> NFANode -> DS.Set NFANode
-lambdaMoves = undefined
+lambdaMoves nfa n = DS.map to validLambda
+  where validLambda = DS.filter (\s -> isLambda s && n == from s) $ moves nfa
 
 normalMoves :: NFA -> Char -> NFANode -> DS.Set NFANode
-normalMoves = undefined
+normalMoves nfa c n = DS.map to validTransitions
+  where validTransitions = DS.filter (\s -> isMove s && n == from s && c == sym s) m
+        m = moves nfa
 
 fixSet :: Ord a => (a -> DS.Set a) -> DS.Set a -> DS.Set a
-fixSet f s = undefined
+fixSet f s =  let
+                newElems  = s
+                newSet    = DS.union s newElems
+              in
+                case newSet == s of
+                  True  -> s
+                  False -> fixSet f newSet
 
 destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
 destinations = undefined
@@ -91,7 +112,7 @@ initialState :: String -> NFARun
 initialState word = undefined
 
 accepting :: NFA -> DS.Set NFANode -> Bool
-accepting = undefined
+accepting nfa states = DS.isSubsetOf (final nfa) states
 
 prop_acceptsemptyword :: NFA -> Property
 prop_acceptsemptyword nfa = undefined
