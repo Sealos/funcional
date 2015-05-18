@@ -56,6 +56,9 @@ instance Arbitrary NFA where
   arbitrary = undefined
 
 
+isValid :: NFA -> Bool
+isValid = undefined
+
 isMove, isLambda :: Transition -> Bool
 isMove   = undefined
 isLambda = undefined
@@ -66,11 +69,11 @@ lambdaMoves = undefined
 normalMoves :: NFA -> Char -> NFANode -> DS.Set NFANode
 normalMoves = undefined
 
-destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
-destinations = undefined
-
 fixSet :: Ord a => (a -> DS.Set a) -> DS.Set a -> DS.Set a
 fixSet f s = undefined
+
+destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
+destinations = undefined
 
 runNFA :: NFA -> [Char] -> IO ()
 runNFA nfa word = undefined
