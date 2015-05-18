@@ -112,7 +112,10 @@ initialState :: String -> NFARun
 initialState word = undefined
 
 accepting :: NFA -> DS.Set NFANode -> Bool
-accepting nfa states = DS.isSubsetOf (final nfa) states
+accepting nfa = DS.foldl' isFinal False
+  where
+    fs      = final nfa
+    isFinal b n = b || DS.member n fs
 
 prop_acceptsemptyword :: NFA -> Property
 prop_acceptsemptyword nfa = undefined
