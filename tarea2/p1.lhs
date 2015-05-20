@@ -24,7 +24,6 @@ instance Show Transition where
                       show t
   show (Lambda f t) = show f ++ " ---> " ++ show t
 
-
 data NFA = NFA { 
                   sigma   :: (DS.Set Char),
                   states  :: (DS.Set NFANode),
@@ -33,7 +32,6 @@ data NFA = NFA {
                   final   :: (DS.Set NFANode)
                }
          deriving (Eq,Show)
-
 
 nfa0 = NFA {
              sigma  = DS.fromList "ab",
@@ -54,16 +52,36 @@ nfa0 = NFA {
 instance Arbitrary NFANode where
   arbitrary = return . Node . getPositive =<< arbitrary
 
-instance Arbitrary NFA where
-  arbitrary = sized $ \n ->
-                let
-                  sigmaGen  = choose ('a', 'z')
-                  statesGen = vectorOf n (arbitrary::Gen (NFANode))
-                  movesGen  = undefined
-                  initial   = Node 0
-                  final     = undefined
-              in undefined
+genToSet :: (Arbitrary a, Ord a) => Gen a -> Gen (DS.Set a)
+genToSet gen = sized (makeGen gen)
 
+makeGen :: (Arbitrary a, Ord a) => Gen a -> Int -> Gen (DS.Set a)
+makeGen gen n
+        | n <= 0    = do
+                      a <- gen
+                      return $ DS.singleton a
+        | otherwise = do
+                      l <- makeGen gen (n - 1) 
+                      r <- makeGen gen (n - 1)
+                      return $ DS.union l r
+
+makeMoves :: Int -> DS.Set Char -> DS.Set NFANode -> DS.Set Transition
+makeMoves n sigma states = DS.empty
+
+makeFinal :: DS.Set NFANode -> DS.Set NFANode
+makeFinal nodes = fst $ DS.foldl' (\(a, b) e -> (union b (singleton e), a)) (empty, empty) nodes 
+  where
+    empty     = DS.empty
+    union     = DS.union
+    singleton = DS.singleton
+
+instance Arbitrary NFA where
+  arbitrary = sized $ \n -> do
+                sigma <- resize (n `div` 2) (genToSet (choose ('a', 'z')))
+                states <- resize n (genToSet arbitrary)
+                return $ NFA sigma (DS.union states (DS.singleton n0)) (makeMoves n sigma states) n0 (makeFinal states)
+            where
+              n0 = Node 0
 
 isValid :: NFA -> Bool
 isValid = undefined
@@ -96,20 +114,24 @@ fixSet f s =  let
 destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
 destinations = undefined
 
-runNFA :: NFA -> [Char] -> IO ()
-runNFA nfa word = undefined
-
 data NFAReject = Stuck (DS.Set NFANode) String
                | Reject (DS.Set NFANode)
                deriving (Show)
 instance Error NFAReject
 
+-- Monad State
 data NFARun = NFARun { w :: String, qs :: DS.Set NFANode }
             deriving (Show,Eq)
+            
+type Log = Seq.Seq String
+type RWS1 = RWS NFA Log NFARun
+type RWSNFA = ErrorT NFAReject RWS1
 
+runNFA :: NFA -> [Char] -> IO ()
+runNFA nfa word = undefined
 
 initialState :: String -> NFARun
-initialState word = undefined
+initialState word = NFARun word (Node 0)
 
 accepting :: NFA -> DS.Set NFANode -> Bool
 accepting nfa = DS.foldl' isFinal False
