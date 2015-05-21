@@ -53,8 +53,7 @@ nfa0 = NFA {
 transitionGen :: [Char] -> [NFANode] -> Gen Transition
 transitionGen sigma states = frequency [
                               (1, genLambda),
-                              (5, genMove)
-                            ]
+                              (5, genMove)]
             where
               genMove = do
                           from  <- elements states
@@ -78,9 +77,6 @@ instance Arbitrary NFA where
                 return $ NFA (DS.fromList sigma) (DS.fromList (n0:states)) (DS.fromList transitions) n0 (DS.fromList final)
             where
               n0 = Node 0
-
-isValid :: NFA -> Bool
-isValid = undefined
 
 isMove :: Transition -> Bool
 isMove = not . isLambda
@@ -115,7 +111,6 @@ destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $
     expand node         = DS.map to $ lambdaConsume node
     moveConsume         = DS.map to $ DS.filter (\e-> isMove e && sym e == char && from e == n) transitions
 
-
 data NFAReject = Stuck (DS.Set NFANode) String  -- Sin transiciones
                | Reject (DS.Set NFANode)        -- Palabra vacia
                deriving (Show)
@@ -132,6 +127,20 @@ type RWSNFA = ErrorT NFAReject RWS1
 runNFA :: NFA -> [Char] -> IO ()
 runNFA nfa word = undefined
 
+checkIfStuck nfa state = case (w state == "" && not(accepting nfa  (qs state))) of
+                          True -> return True
+                          False -> throwError Stuck
+
+
+
+--execNFA :: RWSNFA
+{--
+execNFA = do
+            nfa <- ask
+            s   <- get
+            checkIfStuck nfa s
+
+--}
 initialState :: String -> NFARun
 initialState word = NFARun word (DS.singleton (Node 0))
 
