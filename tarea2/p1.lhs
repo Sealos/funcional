@@ -52,34 +52,12 @@ nfa0 = NFA {
 instance Arbitrary NFANode where
   arbitrary = return . Node . getPositive =<< arbitrary
 
-genToSet :: (Arbitrary a, Ord a) => Gen a -> Gen (DS.Set a)
-genToSet gen = sized (makeGen gen)
-
-makeGen :: (Arbitrary a, Ord a) => Gen a -> Int -> Gen (DS.Set a)
-makeGen gen n
-        | n <= 0    = do
-                      a <- gen
-                      return $ DS.singleton a
-        | otherwise = do
-                      l <- makeGen gen (n - 1) 
-                      r <- makeGen gen (n - 1)
-                      return $ DS.union l r
-
-makeMoves :: Int -> DS.Set Char -> DS.Set NFANode -> DS.Set Transition
-makeMoves n sigma states = DS.empty
-
-makeFinal :: DS.Set NFANode -> DS.Set NFANode
-makeFinal nodes = fst $ DS.foldl' (\(a, b) e -> (union b (singleton e), a)) (empty, empty) nodes 
-  where
-    empty     = DS.empty
-    union     = DS.union
-    singleton = DS.singleton
-
 instance Arbitrary NFA where
-  arbitrary = sized $ \n -> do
-                sigma <- resize (n `div` 2) (genToSet (choose ('a', 'z')))
-                states <- resize n (genToSet arbitrary)
-                return $ NFA sigma (DS.union states (DS.singleton n0)) (makeMoves n sigma states) n0 (makeFinal states)
+  arbitrary = do
+                sigma <- listOf1 (choose ('a', 'z'))
+                states <- listOf1 (arbitrary::Gen NFANode)
+                final <- listOf $ elements states
+                return $ NFA (DS.fromList sigma) (DS.fromList (n0:states)) (DS.empty) n0 (DS.fromList final)
             where
               n0 = Node 0
 
@@ -131,7 +109,7 @@ runNFA :: NFA -> [Char] -> IO ()
 runNFA nfa word = undefined
 
 initialState :: String -> NFARun
-initialState word = NFARun word (Node 0)
+initialState word = NFARun word (DS.singleton (Node 0))
 
 accepting :: NFA -> DS.Set NFANode -> Bool
 accepting nfa = DS.foldl' isFinal False

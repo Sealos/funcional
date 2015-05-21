@@ -27,7 +27,7 @@ instance Show Beta where
 
 \begin{code}
 hacer :: Otro a -> Beta
-hacer (Otro f) = Convive (Quieto) Quieto
+hacer (Otro f) = Convive (\g -> f) Quieto
 
 quieto :: Otro a
 quieto = Otro (\_ -> Quieto)
