@@ -37,13 +37,13 @@ nfa0 = NFA {
              sigma  = DS.fromList "ab",
              states = DS.fromList $ fmap Node [0..3],
              moves  = DS.fromList [
-               Move { from = Node 0, to = Node 0, sym = 'a' },
+               --Move { from = Node 0, to = Node 0, sym = 'a' },
                Lambda { from = Node 0, to = Node 3 },
                Lambda { from = Node 3, to = Node 2 },
-               Lambda { from = Node 0, to = Node 1 },
-               Move { from = Node 0, to = Node 0, sym = 'a' },
+               --Lambda { from = Node 0, to = Node 1 },
+               --Move { from = Node 0, to = Node 0, sym = 'a' },
                Move { from = Node 0, to = Node 1, sym = 'a' },
-               Move { from = Node 1, to = Node 2, sym = 'b' },
+               Move { from = Node 3, to = Node 2, sym = 'b' },
                Move { from = Node 2, to = Node 3, sym = 'b' }
              ],
              initial = Node 0,
@@ -108,7 +108,7 @@ fixSet f s =  let
                   False -> fixSet f newSet
 
 destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
-destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $ DS.singleton n
+destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $ expand n
   where
     lambdaConsume node  = DS.filter (\e -> isLambda e && from e == node) transitions
     transitions         = moves nfa
@@ -116,8 +116,8 @@ destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $
     moveConsume         = DS.map to $ DS.filter (\e-> isMove e && sym e == char && from e == n) transitions
 
 
-data NFAReject = Stuck (DS.Set NFANode) String
-               | Reject (DS.Set NFANode)
+data NFAReject = Stuck (DS.Set NFANode) String  -- Sin transiciones
+               | Reject (DS.Set NFANode)        -- Palabra vacia
                deriving (Show)
 instance Error NFAReject
 
