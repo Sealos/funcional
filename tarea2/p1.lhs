@@ -39,6 +39,7 @@ nfa0 = NFA {
              moves  = DS.fromList [
                Move { from = Node 0, to = Node 0, sym = 'a' },
                Lambda { from = Node 0, to = Node 3 },
+               Lambda { from = Node 3, to = Node 2 },
                Lambda { from = Node 0, to = Node 1 },
                Move { from = Node 0, to = Node 0, sym = 'a' },
                Move { from = Node 0, to = Node 1, sym = 'a' },
@@ -49,15 +50,32 @@ nfa0 = NFA {
              final = DS.fromList [ Node 3 ]
            }
 
+transitionGen :: [Char] -> [NFANode] -> Gen Transition
+transitionGen sigma states = frequency [
+                              (1, genLambda),
+                              (5, genMove)
+                            ]
+            where
+              genMove = do
+                          from  <- elements states
+                          to    <- elements states
+                          sigma <- elements sigma
+                          return $ Move from to sigma
+              genLambda   = do
+                          from  <- elements states
+                          to    <- elements states
+                          return $ Lambda from to
+
 instance Arbitrary NFANode where
   arbitrary = return . Node . getPositive =<< arbitrary
 
 instance Arbitrary NFA where
-  arbitrary = do
-                sigma <- listOf1 (choose ('a', 'z'))
-                states <- listOf1 (arbitrary::Gen NFANode)
-                final <- listOf $ elements states
-                return $ NFA (DS.fromList sigma) (DS.fromList (n0:states)) (DS.empty) n0 (DS.fromList final)
+  arbitrary = sized $ \n -> do
+                sigma       <- listOf1 (choose ('a', 'z'))
+                states      <- listOf1 (arbitrary::Gen NFANode)
+                final       <- listOf $ elements (n0:states)
+                transitions <- resize (3*n) $ listOf $ transitionGen sigma (n0:states)
+                return $ NFA (DS.fromList sigma) (DS.fromList (n0:states)) (DS.fromList transitions) n0 (DS.fromList final)
             where
               n0 = Node 0
 
@@ -82,7 +100,7 @@ normalMoves nfa c n = DS.map to validTransitions
 
 fixSet :: Ord a => (a -> DS.Set a) -> DS.Set a -> DS.Set a
 fixSet f s =  let
-                newElems  = s
+                newElems  = DS.unions $ DS.foldl' (\a e -> (f e):a) [] s
                 newSet    = DS.union s newElems
               in
                 case newSet == s of
@@ -90,7 +108,13 @@ fixSet f s =  let
                   False -> fixSet f newSet
 
 destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
-destinations = undefined
+destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $ DS.singleton n
+  where
+    lambdaConsume node  = DS.filter (\e -> isLambda e && from e == node) transitions
+    transitions         = moves nfa
+    expand node         = DS.map to $ lambdaConsume node
+    moveConsume         = DS.map to $ DS.filter (\e-> isMove e && sym e == char && from e == n) transitions
+
 
 data NFAReject = Stuck (DS.Set NFANode) String
                | Reject (DS.Set NFANode)
