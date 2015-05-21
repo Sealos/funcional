@@ -27,7 +27,7 @@ instance Show Beta where
 
 \begin{code}
 hacer :: Otro a -> Beta
-hacer (Otro f) = Convive (\g -> f) Quieto
+hacer (Otro f) = Convive (Quieto) Quieto
 
 quieto :: Otro a
 quieto = Otro (\_ -> Quieto)
@@ -42,17 +42,18 @@ pana :: Otro a -> Otro a -> Otro a
 pana (Otro f) (Otro g) = Otro (\b -> Convive (f b) (g b))
 
 vaca :: [Beta] -> IO ()
+vaca [] = putStrLn ""
 vaca (Quieto:xs) = vaca xs
-vaca ((Convive a b):xs) = vaca $ a:b:xs
-vaca (Chamba x:xs) = vaca xs --wat
+vaca ((Convive a b):xs) = vaca $ concat [xs, [b], [a]]
+vaca (Chamba x:xs) = x >> vaca xs
 
 \end{code}
 
 g = (b -> Beta) -> Beta 
-m ((a -> Beta) -> Beta) -> (((a -> Beta) -> Beta) -> m b) -> m b
+((a -> Beta) -> Beta) -> (a -> ((b -> Beta) -> Beta)) -> ((b -> Beta) -> Beta)
 \begin{code}
 instance Monad Otro where
-  return x       = chambea (return x)
+  return x       = undefined
   (Otro f) >>= g = undefined
 
 \end{code}
