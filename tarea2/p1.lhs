@@ -1,12 +1,15 @@
 \begin{code}
 import Control.Monad
-import Control.Monad.RWS
-import Control.Monad.Error
 import qualified Data.Sequence as Seq
 import qualified Data.Set as DS
 import Data.Char
 import Data.Either
 import Test.QuickCheck
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Error
+import Control.Monad.Trans.State
+import Control.Monad.Trans.Writer
+import Control.Monad.Identity
 
 newtype NFANode = Node Int 
                 deriving (Eq,Ord)
@@ -111,6 +114,9 @@ destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $
     expand node         = DS.map to $ lambdaConsume node
     moveConsume         = DS.map to $ DS.filter (\e-> isMove e && sym e == char && from e == n) transitions
 
+destFromNodes :: NFA -> Char -> DS.Set NFANode -> DS.Set NFANode
+destFromNodes nfa char ns = DS.unions . DS.toList $ DS.map (destinations nfa char) ns
+
 data NFAReject = Stuck (DS.Set NFANode) String  -- Sin transiciones
                | Reject (DS.Set NFANode)        -- Palabra vacia
                deriving (Show)
@@ -120,27 +126,43 @@ instance Error NFAReject
 data NFARun = NFARun { w :: String, qs :: DS.Set NFANode }
             deriving (Show,Eq)
             
-type Log = Seq.Seq String
-type RWS1 = RWS NFA Log NFARun
-type RWSNFA = ErrorT NFAReject RWS1
+type NFALog = Seq.Seq String
+type RWSNFA a = ReaderT NFA (ErrorT NFAReject (WriterT NFALog (StateT NFARun IO))) a
 
 runNFA :: NFA -> [Char] -> IO ()
 runNFA nfa word = undefined
 
-checkIfStuck nfa state = case (w state == "" && not(accepting nfa  (qs state))) of
-                          True -> return True
-                          False -> throwError Stuck
+evalNFA :: NFA -> [Char] -> RWSNFA a -> IO ((Either NFAReject a, NFALog), NFARun)
+evalNFA nfa sym = (flip runStateT state) . runWriterT . runErrorT . (flip runReaderT) nfa
+  where state = initialState sym
 
+start :: RWSNFA a
+start = undefined
 
+logNodes :: [NFANode] -> Seq.Seq String
+logNodes nodes = Seq.singleton $ show nodes
 
---execNFA :: RWSNFA
+flow :: RWSNFA ()
+flow = do
+      s <- gets
+      nfa <- asks
+      let (sym, states) = (w s, qs s)
+          newNodes = destFromNodes nfa (head sym) states
+      if sym /= "" then
+        --tell $ logNodes $ DS.toList newNodes
+        return ()
+      else
+        return ()
+
 {--
-execNFA = do
-            nfa <- ask
-            s   <- get
-            checkIfStuck nfa s
+  p <- get
+  put $ p {w = ""}
+  s <- ask
+  return
 
 --}
+
+
 initialState :: String -> NFARun
 initialState word = NFARun word (DS.singleton (Node 0))
 

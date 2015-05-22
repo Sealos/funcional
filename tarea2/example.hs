@@ -227,7 +227,7 @@ type Eval6 a = ReaderT Env (ErrorT ExpError (WriterT ExpLog (StateT EvalState IO
 evalM6 :: Env -> EvalState -> Eval6 a -> IO ((Either ExpError a,ExpLog),EvalState)
 evalM6 env init = (flip runStateT init) . runWriterT .
                   runErrorT .  (flip runReaderT) env
-
+--evalM6 env initialState $ eval6 ex5
 eval6 :: Exp -> Eval6 Int
 eval6 t@(Const i) = do
   s <- get
