@@ -5,11 +5,12 @@ import qualified Data.Map      as DM
 import Data.Sequence as DS
 import Data.Foldable as DF
 import qualified Data.List as DL
-import Control.Monad.Identity
-import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Error
-import Control.Monad.Reader
+import Control.Monad.Trans.Reader
+import Control.Monad
+import Control.Monad.Trans.Error
+import Control.Monad.Trans.State
+import Control.Monad.Trans.Writer
+import Control.Monad.Trans.IdentityT
 
 data Exp = Const Int
          | Var String
@@ -37,7 +38,7 @@ ex3 = (Mul (Const 2) ex1)
 ex4 = (Add (Mul ex2 (Const 5)) (ex3))
 ex5 = (Add (Div (Const 42) (Const 2)) (Mul (Const 3) (Const 7)))
 
-type Eval1 a = Identity a
+type Eval1 a = IdentityT a
 
 --eval1 :: Env -> Exp -> Eval1 Int
 eval1 env (Const i) = return i
@@ -56,7 +57,7 @@ eval1 env (Div l r) = do i1 <- eval1 env l
                          return $ i1 `div` i2
 
 evalM1 :: Eval1 a -> a
-evalM1 = runIdentity
+evalM1 = runIdentityTT
 
 data ExpError = DivisionPorCero
               | NumeroDeMalaSuerte
@@ -65,7 +66,7 @@ data ExpError = DivisionPorCero
 
 instance Error ExpError
 
-type Eval2 a = ErrorT ExpError Identity a
+type Eval2 a = ErrorT ExpError IdentityT a
 
 eval2 :: Env -> Exp -> Eval2 Int
 eval2 env (Const i) = checkForThirteen i
@@ -88,9 +89,9 @@ checkForThirteen i = if i == 13 then throwError NumeroDeMalaSuerte
 
 
 evalM2 :: Eval2 a -> Either ExpError a
-evalM2 = runIdentity . runErrorT 
+evalM2 = runIdentityTT . runErrorT 
 
-type Eval3 a = ReaderT Env (ErrorT ExpError Identity) a
+type Eval3 a = ReaderT Env (ErrorT ExpError IdentityT) a
 
 eval3 :: Exp -> Eval3 Int
 eval3 (Const i) = checkForThirteen i
@@ -111,7 +112,7 @@ checkMath' op l r = liftM2 (op) (eval3 l) (eval3 r) >>= checkForThirteen
 
 
 evalM3 :: Env -> Eval3 a -> Either ExpError a
-evalM3 env = runIdentity . runErrorT . (flip runReaderT) env
+evalM3 env = runIdentityTT . runErrorT . (flip runReaderT) env
 
 data EvalState = EvalState { adds, subs, muls, divs, vars, tabs :: Int }
                deriving (Show)
@@ -125,7 +126,7 @@ initialState = EvalState {
                            tabs = 0
                          }
 
-type Eval4 a = ReaderT Env (ErrorT ExpError (StateT EvalState Identity)) a
+type Eval4 a = ReaderT Env (ErrorT ExpError (StateT EvalState IdentityT)) a
 
 eval4 :: Exp -> Eval4 Int
 eval4 (Const i) = checkForThirteen i
@@ -162,13 +163,13 @@ eval4 (Div l r) = do
                      checkForThirteen $ vl `div` vr
 
 evalM4 :: Env -> EvalState -> Eval4 a -> (Either ExpError a,EvalState)
-evalM4 env init = runIdentity . (flip runStateT init) . runErrorT .
+evalM4 env init = runIdentityTT . (flip runStateT init) . runErrorT .
                   (flip runReaderT) env
 
 type ExpLog = DS.Seq String
 
 type Eval5 a = ReaderT Env (ErrorT ExpError 
-                           (WriterT ExpLog (StateT EvalState Identity))) a
+                           (WriterT ExpLog (StateT EvalState IdentityT))) a
 
 eval5 :: Exp -> Eval5 Int
 eval5 t@(Const i) = do
@@ -219,7 +220,7 @@ logExp :: Exp -> Int -> Seq String
 logExp e v = singleton $ "Exp: " ++ show e ++ " -> Val: " ++ show v
 
 evalM5 :: Env -> EvalState -> Eval5 a -> ((Either ExpError a,ExpLog),EvalState)
-evalM5 env init = runIdentity . (flip runStateT init) . runWriterT .
+evalM5 env init = runIdentityTT . (flip runStateT init) . runWriterT .
                   runErrorT .  (flip runReaderT) env
 
 type Eval6 a = ReaderT Env (ErrorT ExpError (WriterT ExpLog (StateT EvalState IO))) a
@@ -232,7 +233,7 @@ eval6 :: Exp -> Eval6 Int
 eval6 t@(Const i) = do
   s <- get
   tell $ logExp t i
-  liftIO $ putStrLn $ indent (tabs s) (show i)
+  lift $ putStrLn $ indent (tabs s) (show i)
   checkForThirteen i
 eval6 t@(Var n)   = do s <- get
                        env <- ask
@@ -240,12 +241,12 @@ eval6 t@(Var n)   = do s <- get
                          Nothing -> throwError $ VariableNoExiste n
                          Just v  -> do put $ s { vars = vars s + 1}
                                        tell $ logExp t v
-                                       liftIO $ putStrLn $ indent (tabs s) 
+                                       lift $ putStrLn $ indent (tabs s) 
                                                                   (show v)
                                        checkForThirteen v
 eval6 t@(Add l r) = do
   p <- get
-  liftIO $ putStrLn $ indent (tabs p) "+"
+  lift $ putStrLn $ indent (tabs p) "+"
   put $ p { tabs = tabs p + 2 }
   vl <- eval6 l
   vr <- eval6 r
@@ -256,7 +257,7 @@ eval6 t@(Add l r) = do
   checkForThirteen v
 eval6 t@(Sub l r) = do
   p <- get
-  liftIO $ putStrLn $ indent (tabs p) "-"
+  lift $ putStrLn $ indent (tabs p) "-"
   put $ p { tabs = tabs p + 2 }
   vl <- eval6 l
   vr <- eval6 r
@@ -267,7 +268,7 @@ eval6 t@(Sub l r) = do
   checkForThirteen v
 eval6 t@(Mul l r) = do
   p <- get
-  liftIO $ putStrLn $ indent (tabs p) "*"
+  lift $ putStrLn $ indent (tabs p) "*"
   put $ p { tabs = tabs p + 2 }
   vl <- eval6 l
   vr <- eval6 r
@@ -278,7 +279,7 @@ eval6 t@(Mul l r) = do
   checkForThirteen v
 eval6 t@(Div l r) = do
   p <- get
-  liftIO $ putStrLn $ indent (tabs p) "/"
+  lift $ putStrLn $ indent (tabs p) "/"
   put $ p { tabs = tabs p + 2 }
   vl <- eval6 l
   vr <- eval6 r

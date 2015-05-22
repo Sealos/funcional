@@ -1,3 +1,81 @@
+\documentclass[11pt,fleqn]{article}
+
+\usepackage{tikz}
+\usepackage{multicol}
+\usepackage{latexsym}
+\usepackage{array}
+\usepackage[english,spanish]{babel}
+\usepackage{lmodern}
+\usepackage{listings}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[colorlinks=true,urlcolor=blue]{hyperref}
+\usepackage{xcolor}
+\usepackage{verbatim}
+\usepackage{listings}
+\long\def\ignore#1{}
+\lstloadlanguages{Haskell}
+\lstnewenvironment{code}
+    {\lstset{}%
+      \csname lst@SetFirstLabel\endcsname}
+    {\csname lst@SaveFirstLabel\endcsname}
+    \lstset{
+      basicstyle=\small\ttfamily,
+      flexiblecolumns=false,
+      basewidth={0.6em,0.6em},
+      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+               {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+               {\\\\}{{\char`\\\char`\\}}1
+               {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+               {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+               {>>}{{>>}}2 {>>=}{{>>=}}2
+               {|}{{$\mid$}}1               
+    }
+
+\usepackage{algorithmic}
+\usepackage{algorithm}
+
+\usetikzlibrary{positioning,shapes,folding,positioning,shapes,trees}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue
+}
+
+\definecolor{brown}{rgb}{0.7,0.2,0}
+\definecolor{darkgreen}{rgb}{0,0.6,0.1}
+\definecolor{darkgrey}{rgb}{0.4,0.4,0.4}
+\definecolor{lightgrey}{rgb}{0.95,0.95,0.95}
+
+
+
+\lstset{
+   language=Haskell,
+   gobble=2,
+   frame=single,
+   framerule=1pt,
+   showstringspaces=false,
+   basicstyle=\footnotesize\ttfamily,
+   keywordstyle=\textbf,
+   backgroundcolor=\color{lightgrey}
+}
+
+\long\def\ignore#1{}
+
+\begin{document}
+
+
+\title{CI4251 - Programación Funcional Avanzada \\ Tarea 2}
+\author{Stefano De Colli\\09-10203}
+\date{Mayo 22, 2015}
+
+\maketitle
+
+\pagebreak
+
+\ignore{
 \begin{code}
 import Control.Monad
 import qualified Data.Sequence as Seq
@@ -9,7 +87,7 @@ import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Error
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Writer
-import Control.Monad.Identity
+import Control.Monad.Trans.Identity
 
 newtype NFANode = Node Int 
                 deriving (Eq,Ord)
@@ -53,6 +131,31 @@ nfa0 = NFA {
              final = DS.fromList [ Node 3 ]
            }
 
+data NFAReject = Stuck (DS.Set NFANode) String  -- Sin transiciones
+               | Reject (DS.Set NFANode)        -- Palabra vacia
+               deriving (Show)
+instance Error NFAReject
+
+-- Monad State
+data NFARun = NFARun { w :: String, qs :: DS.Set NFANode }
+            deriving (Show,Eq)
+            
+type NFALog = Seq.Seq String
+type RWSNFA a = ReaderT NFA (ErrorT NFAReject (WriterT NFALog (StateT NFARun IO))) a
+\end{code}
+}
+
+\noindent
+Se aprovechó del tipo de dato Positive de QuickCheck para solo generar
+nodos de enteros positivos
+\begin{code}
+instance Arbitrary NFANode where
+  arbitrary = return . Node . getPositive =<< arbitrary
+\end{code}
+
+Esta funcion auxiliar devuelve un generador de transiciones dado una lista
+de caracteres y una lista de estados.
+\begin{code}
 transitionGen :: [Char] -> [NFANode] -> Gen Transition
 transitionGen sigma states = frequency [
                               (1, genLambda),
@@ -67,10 +170,12 @@ transitionGen sigma states = frequency [
                           from  <- elements states
                           to    <- elements states
                           return $ Lambda from to
-
-instance Arbitrary NFANode where
-  arbitrary = return . Node . getPositive =<< arbitrary
-
+\end{code}
+\noindent
+Para hacer las instancias arbitrarias del NFA, primero se selecciona el
+alfabeto y los estados, y luego se construyen las transiciones y los
+estados final partiendo de los valores generados.
+\begin{code}
 instance Arbitrary NFA where
   arbitrary = sized $ \n -> do
                 sigma       <- listOf1 (choose ('a', 'z'))
@@ -80,14 +185,19 @@ instance Arbitrary NFA where
                 return $ NFA (DS.fromList sigma) (DS.fromList (n0:states)) (DS.fromList transitions) n0 (DS.fromList final)
             where
               n0 = Node 0
-
+\end{code}
+\noindent
+Para reconocer si una transición es lambda o no.
+\begin{code}
 isMove :: Transition -> Bool
 isMove = not . isLambda
 
 isLambda :: Transition -> Bool
 isLambda (Lambda _ _) = True
 isLambda _            = False
+\end{code}
 
+\begin{code}
 lambdaMoves :: NFA -> NFANode -> DS.Set NFANode
 lambdaMoves nfa n = DS.map to validLambda
   where validLambda = DS.filter (\s -> isLambda s && n == from s) $ moves nfa
@@ -105,7 +215,12 @@ fixSet f s =  let
                 case newSet == s of
                   True  -> s
                   False -> fixSet f newSet
-
+\end{code}
+\noindent
+Esta funcion calcula los posibles estados a los cuales puede alcanzar un NFA. 
+Primero se calculan las lambda transiciones del nodo principal, luego
+se consume el simbolo, y al final se vuelve a calcular las lambda transiciones.
+\begin{code}
 destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
 destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $ expand n
   where
@@ -113,56 +228,34 @@ destinations nfa char n = fixSet expand $ DS.union moveConsume $ fixSet expand $
     transitions         = moves nfa
     expand node         = DS.map to $ lambdaConsume node
     moveConsume         = DS.map to $ DS.filter (\e-> isMove e && sym e == char && from e == n) transitions
-
+\end{code}
+\begin{code}
 destFromNodes :: NFA -> Char -> DS.Set NFANode -> DS.Set NFANode
 destFromNodes nfa char ns = DS.unions . DS.toList $ DS.map (destinations nfa char) ns
-
-data NFAReject = Stuck (DS.Set NFANode) String  -- Sin transiciones
-               | Reject (DS.Set NFANode)        -- Palabra vacia
-               deriving (Show)
-instance Error NFAReject
-
--- Monad State
-data NFARun = NFARun { w :: String, qs :: DS.Set NFANode }
-            deriving (Show,Eq)
-            
-type NFALog = Seq.Seq String
-type RWSNFA a = ReaderT NFA (ErrorT NFAReject (WriterT NFALog (StateT NFARun IO))) a
 
 runNFA :: NFA -> [Char] -> IO ()
 runNFA nfa word = undefined
 
-evalNFA :: NFA -> [Char] -> RWSNFA a -> IO ((Either NFAReject a, NFALog), NFARun)
-evalNFA nfa sym = (flip runStateT state) . runWriterT . runErrorT . (flip runReaderT) nfa
+start :: NFA -> [Char] -> RWSNFA a -> IO ((Either NFAReject a, NFALog), NFARun)
+start nfa sym = (flip runStateT state) . runWriterT . runErrorT . (flip runReaderT) nfa
   where state = initialState sym
-
-start :: RWSNFA a
-start = undefined
 
 logNodes :: [NFANode] -> Seq.Seq String
 logNodes nodes = Seq.singleton $ show nodes
 
-flow :: RWSNFA ()
-flow = do
-      s <- gets
-      nfa <- asks
-      let (sym, states) = (w s, qs s)
-          newNodes = destFromNodes nfa (head sym) states
-      if sym /= "" then
-        --tell $ logNodes $ DS.toList newNodes
-        return ()
-      else
-        return ()
+checkForStuck nfa nfarun@(NFARun w qs) =  if qs == DS.empty then 
+                                            throwError $ Stuck qs w
+                                          else return ()
+checkForReject nfa nfarun@(NFARun w qs) = if w == "" && (not (accepting nfa qs)) then
+                                            throwError $ Reject qs
+                                          else
+                                            return ()
 
-{--
-  p <- get
-  put $ p {w = ""}
-  s <- ask
-  return
+\end{code}
 
---}
-
-
+\noindent
+El monad aprovecha varias funciones auxiliares
+\begin{code}
 initialState :: String -> NFARun
 initialState word = NFARun word (DS.singleton (Node 0))
 
@@ -172,10 +265,13 @@ accepting nfa = DS.foldl' isFinal False
     fs      = final nfa
     isFinal b n = b || DS.member n fs
 
+\end{code}
+
+\begin{code}
 prop_acceptsemptyword :: NFA -> Property
 prop_acceptsemptyword nfa = undefined
 
 prop_acceptancelength :: NFA -> String -> Property
 prop_acceptancelength nfa w = undefined
-
 \end{code}
+\end{document}

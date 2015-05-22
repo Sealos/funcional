@@ -1,7 +1,5 @@
 \begin{code}
 import Control.Monad
-import Control.Monad.RWS
-import Control.Monad.Error
 import Control.Applicative
 import qualified Data.Sequence as Seq
 import qualified Data.Set as DS
@@ -27,7 +25,7 @@ instance Show Beta where
 
 \begin{code}
 hacer :: Otro a -> Beta
-hacer (Otro f) = Convive (Quieto) Quieto
+hacer (Otro f) = Convive (\g -> f g) Quieto
 
 quieto :: Otro a
 quieto = Otro (\_ -> Quieto)
