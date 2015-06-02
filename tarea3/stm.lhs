@@ -29,43 +29,83 @@ delay seed lo hi = randomR (lo, hi) seed
 
 wait t = threadDelay t
 
-put :: Buffer -> String -> STM String
-put = undefined
-
+put :: Buffer -> String -> STM ()
+put buffer item = do ls <- readTVar buffer
+                     writeTVar buffer (ls |> item)
+ 
 get :: Buffer -> STM String
-get buffer = undefined
+get buffer = do ls <- readTVar buffer
+                case viewl ls of
+                  EmptyL       -> retry
+                  item :< rest -> do writeTVar buffer rest
+                                     return item
+
+inc x = x + 1
+dec x = x - 1
+incM m x = x + m
 
 rafita :: Int -> STM ()
 rafita = undefined
 
 randomDelay lo hi = do
 						r <- randomRIO (lo,hi)
-                 		threadDelay r
+						threadDelay r
 
 --cocinar :: RandomGen g => g -> Int -> Bowl -> Total -> IO ()
-cocinar g m b tt = do
-					let (t, s) = delay g 3000 5000
-					wait t
-					return () 
+cocinar m bowl total buffer = do
+					b <- readTVar bowl
+					if b > 0 then
+						return ()
+					else
+						do 
+							writeTVar bowl m
+							put buffer "Rafita esta cocinando"
+							modifyTVar' total (incM m)
+
+
+agarrarEmpanada m bowl counter total buffer str = do
+							b <- readTVar bowl
+							if b > 0 then
+								do
+									writeTVar bowl $ b - 1
+									modifyTVar' counter inc
+									put buffer str
+							else
+								cocinar m bowl total buffer
 
 
 -- Si un parroquiano tiene hambre, pero no hay empanadas, le avisa a Rafita para que prepare más.
 
-parroquiano :: Int -> Bowl -> STM ()
-parroquiano n = undefined
+--parroquiano :: Int -> Bowl -> STM ()
+parroquiano m n bowl selfCounter total buffer = do
+					atomically $ put buffer $ "Parroquiano " ++ (show n) ++ " tiene hambre"
+					atomically $ agarrarEmpanada m bowl selfCounter total buffer $ "Parroquiano " ++ (show n) ++ " come empanada" 
+					randomDelay 1000000 7000000
+					atomically $ put buffer $ "Parroquiano " ++ (show n) ++ " bebe"
+					parroquiano m n bowl selfCounter total buffer
+
+
+infinite :: Int -> Int
+infinite 0 = 0
+infinite x = infinite (x - 1)
 
 transactional :: Int -> Int -> IO ()
 transactional m n = do
 					counters <- replicateM n newCounter
 					bowl <- newCounter
 					total <- newCounter
-					print "rafita cocina"
-					randomDelay 3000 5000
+					stall <- newCounter
+					buffer <- newBuffer
+					iszero <- atomically $ readTVar stall
+					randomDelay 300000 500000
+					forM_ [1..n] $ (\i ->
+						forkIO $ parroquiano m i (counters !! (i - 1)) bowl total buffer)
 
-
-					return ()
+					output buffer
 
 -- Outputs the whole buffer to console
-output :: Buffer -> IO ()
-output buffer = undefined
+output buffer = 
+    do str <- atomically $ get buffer
+       putStrLn str
+       output buffer
 \end{code}
