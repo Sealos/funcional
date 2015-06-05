@@ -103,6 +103,7 @@ parroquiano i counter bowl buffer stall bool = do
 
 transactional :: Int -> Int -> IO ()
 transactional m n = do
+					setStdGen $ mkStdGen randomSeed
 					counters <- replicateM n newCounter
 					bowl <- newCounter
 					total <- newCounter
