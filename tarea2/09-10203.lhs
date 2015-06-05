@@ -123,6 +123,34 @@ data NFARun = NFARun { w :: String, qs :: DS.Set NFANode }
             deriving (Show,Eq)
             
 type NFALog = Seq.Seq String
+
+n0 = Node 0
+nfa0 = NFA {
+             sigma  = DS.fromList "a",
+             states = DS.fromList $ fmap Node [0..1],
+             moves  = DS.fromList [
+               --Move { from = Node 0, to = Node 0, sym = 'a' },
+               Lambda { from = Node 0, to = Node 1 },
+               --Move { from = Node 0, to = Node 0, sym = 'a' },
+               --Move { from = Node 0, to = Node 1, sym = 'b' }
+               --Lambda { from = Node 1, to = Node 2 },
+               --Lambda { from = Node 4, to = Node 5 },
+               --Lambda { from = Node 5, to = Node 6 },
+               --Lambda { from = Node 3, to = Node 2 },
+               --Lambda { from = Node 0, to = Node 1 }
+               Move { from = Node 1, to = Node 0, sym = 'a' }
+               --Move { from = Node 2, to = Node 3, sym = 'a' },
+               --Move { from = Node 3, to = Node 4, sym = 'b' }
+               --Move { from = Node 3, to = Node 2, sym = 'b' },
+               --Move { from = Node 2, to = Node 3, sym = 'b' }
+             ],
+             initial = Node 0,
+             final = DS.fromList [ Node 1 ]
+           }
+
+-- Auxiliares para pruebas
+isLeft = null . rights . return
+isRight = null . lefts . return
 \end{code}
 }
 
@@ -177,7 +205,9 @@ isLambda :: Transition -> Bool
 isLambda (Lambda _ _) = True
 isLambda _            = False
 \end{code}
-
+\pagebreak
+\noindent
+Y las obtener caminos dependiendo de las transiciones
 \begin{code}
 lambdaMoves :: NFA -> NFANode -> DS.Set NFANode
 lambdaMoves nfa n = DS.map to validLambda
@@ -187,7 +217,11 @@ normalMoves :: NFA -> Char -> NFANode -> DS.Set NFANode
 normalMoves nfa c n = DS.map to validTransitions
   where validTransitions = DS.filter (\s -> isMove s && n == from s && c == sym s) m
         m = moves nfa
+\end{code}
 
+\noindent
+El algoritmo punto fijo que inserta valores hasta que los conjuntos son iguales
+\begin{code}
 fixSet :: Ord a => (a -> DS.Set a) -> DS.Set a -> DS.Set a
 fixSet f s =  let
                 newElems  = DS.unions $ DS.foldl' (\a e -> (f e):a) [] s
@@ -204,7 +238,7 @@ se consume el simbolo, y al final se vuelve a calcular las lambda transiciones.
 \begin{code}
 
 lambdaDest :: NFA -> NFANode -> DS.Set NFANode
-lambdaDest nfa n = fixSet (lambdaMoves nfa0) (DS.singleton (n))
+lambdaDest nfa n = fixSet (lambdaMoves nfa) (DS.singleton (n))
 
 destinations :: NFA -> Char -> NFANode -> DS.Set NFANode
 destinations nfa char n = sClosure
@@ -214,83 +248,87 @@ destinations nfa char n = sClosure
     sClosure = fixSet (lambdaDest nfa) fClosure
 
 \end{code}
+\pagebreak
+
+
+\noindent
+Dado un conjunto de estados, obtener todos los posibles destinos
 \begin{code}
 destFromNodes :: NFA -> Char -> DS.Set NFANode -> DS.Set NFANode
 destFromNodes nfa char ns = DS.unions . DS.toList $ DS.map (destinations nfa char) ns
+\end{code}
 
+\noindent
+Imprimir el estado resultante o los errores dependiendo de la corrida
+\begin{code}
 runNFA :: NFA -> [Char] -> IO ()
 runNFA nfa word = do
-                   let (err, state, log) = start nfa word flow
-                   print err
-                   print state
-                   print log
+                   let (res, state, log) = start nfa word flow
+                   case res of
+                    Right x -> print log
+                    Left x -> print x
+\end{code}          
 
+\noindent
+Iniciamos el estado y quitamos la capa de error y corremos el RWS
+\begin{code}
 start :: NFA -> [Char] -> RWSNFA a -> (Either NFAReject a, NFARun, NFALog)
 start nfa sym = ((flip $ (flip runRWS) nfa) state) . runErrorT
   where state = initialState sym
+\end{code}
 
+\noindent
+Funcion para el monad Writer
+\begin{code}
 logNodes :: DS.Set NFANode -> Seq.Seq String
 logNodes nodes = Seq.singleton $ show nodes
-
 \end{code}
+\pagebreak
+\noindent
+La funcion flow tiene varios casos, primero verifica si queda una palabra vacia,
+si es asi, verificamos si nos podemos mover, esto es por si acaso estamos en el
+estado inicial, y hay alguna lambda clausura que llegue al estado final. Si la
+palabra no es vacia, entonces generamos la lambda clausura completa y
+verficamos si hay estados, si hay entonces consumimos, si no estamos trancados.
 \begin{code}
-n0 = Node 0
-nfa0 = NFA {
-             sigma  = DS.fromList "a",
-             states = DS.fromList $ fmap Node [0..1],
-             moves  = DS.fromList [
-               --Move { from = Node 0, to = Node 0, sym = 'a' },
-               Lambda { from = Node 0, to = Node 1 },
-               --Move { from = Node 0, to = Node 0, sym = 'a' },
-               --Move { from = Node 0, to = Node 1, sym = 'b' }
-               --Lambda { from = Node 1, to = Node 2 },
-               --Lambda { from = Node 4, to = Node 5 },
-               --Lambda { from = Node 5, to = Node 6 },
-               --Lambda { from = Node 3, to = Node 2 },
-               --Lambda { from = Node 0, to = Node 1 }
-               Move { from = Node 1, to = Node 0, sym = 'a' }
-               --Move { from = Node 2, to = Node 3, sym = 'a' },
-               --Move { from = Node 3, to = Node 4, sym = 'b' }
-               --Move { from = Node 3, to = Node 2, sym = 'b' },
-               --Move { from = Node 2, to = Node 3, sym = 'b' }
-             ],
-             initial = Node 0,
-             final = DS.fromList [ Node 1 ]
-           }
-
 flow :: RWSNFA ()
 flow = do
       nfa <- ask
       s <- get
       let cw = w s
           cs = qs s
+          ns = destFromNodes nfa (head cw) cs
       if cw == "" then
         do
           -- Hacemos esto por si estamos en el estado inicial
           let ls = fixSet (lambdaDest nfa) cs
           if accepting nfa ls then
-            return ()
+            do
+              tell $ logNodes ls
+              return ()
           else
             throwError $ Reject ls
       else
         do
           let nw = tail cw
               ns = destFromNodes nfa (head cw) cs
-              con = fixSet (normalMoves nfa (head cw)) lon
-              lon = fixSet (lambdaDest nfa) cs
           -- Si no es vacia y no hay estados..
-          if con == DS.empty then
+          if ns == DS.empty then
             throwError $ Stuck cs cw
           else
+            -- Consumimos
             do
               tell $ logNodes cs
               put $ s { qs = ns, w = nw }
               flow
 
 \end{code}
-
+\pagebreak
 \noindent
-El monad aprovecha varias funciones auxiliares
+El monad aprovecha varias funciones auxiliares, initialState
+genera un estado que el monad State puede aprovechar, mientras
+que accepting verifica si hay algun estado que es miembro del conjunto
+final de estados
 \begin{code}
 initialState :: String -> NFARun
 initialState word = NFARun word (DS.singleton (Node 0))
@@ -303,11 +341,124 @@ accepting nfa = DS.foldl' isFinal False
 
 \end{code}
 
+
+\noindent
+Todo estado que contiene al estado inicial acepta la palabra vacia
++++ OK, passed 1000 tests.
 \begin{code}
 prop_acceptsemptyword :: NFA -> Property
-prop_acceptsemptyword nfa = undefined
-
-prop_acceptancelength :: NFA -> String -> Property
-prop_acceptancelength nfa w = undefined
+prop_acceptsemptyword nfa = accepting nfa (DS.singleton (initial nfa)) ==> case result of
+                              Right _ -> True
+                              Left _  -> False
+  where
+    (result, _, _) = start nfa "" flow
 \end{code}
+
+
+\noindent
+Cuando un $\lambda$ NFA acepta una palabra de longitud n, el camino recorrido
+tiene longitud n + 1.
+*** Gave up! Passed only 30 tests.
+\begin{code}
+prop_acceptancelength :: NFA -> String -> Property
+prop_acceptancelength nfa w = isRight result ==> (Seq.length log) == (1 + length w)
+  where
+    (result, _, log) = start nfa w flow
+\end{code}
+
+\pagebreak
+\section*{Otro Beta}
+
+\ignore{
+\begin{code}
+data Otro a = Otro { fromOtro :: ((a -> Beta) -> Beta) }
+
+data Beta = Chamba (IO Beta)
+          | Convive Beta Beta
+          | Quieto
+
+instance Show Beta where
+   show (Chamba x)    = " chamba "
+   show (Convive x y) = " convive(" ++ show x 
+                                    ++ "," 
+                                    ++ show y ++ ") "
+   show Quieto        = " quieto "
+
+cartel :: Otro ()
+cartel = pana (dale (clavo 42)) (pana (dale (clavo 69)) (pana (dale (clavo 17)) (dale (clavo 23) >> chambea (putStrLn ""))))
+                
+quedo :: Otro a -> IO ()
+quedo x = vaca [hacer x]
+
+clavo :: Int -> String
+clavo 17 = "/nlmce"
+clavo 23 = "/y./p6"
+clavo 42 = "htptuc2"
+clavo 69 = "t:irofr"
+
+dale :: String -> Otro ()
+dale = mapM_ (chambea . putChar)
+\end{code}
+}
+
+\noindent
+Haces lo que tienes que hacer y sigues...
+\begin{code}
+hacer :: Otro a -> Beta
+hacer (Otro f) = f (const Quieto)
+\end{code}
+
+\noindent
+Te quedas quieto
+\begin{code}
+quieto :: Otro a
+quieto = Otro (const Quieto)
+\end{code}
+
+\noindent
+Haces lo tuyo y luego nada
+\begin{code}
+convive :: Otro a -> Otro ()
+convive o =  Otro (\f -> Convive (hacer o) (f ()))
+\end{code}
+
+\noindent
+Guardas lo que vas a imprimir
+\begin{code}
+chambea :: IO a -> Otro a
+chambea x = Otro (\f -> Chamba $ fmap f x)
+\end{code}
+
+\noindent
+Cada quien busca por su lado...
+\begin{code}
+pana :: Otro a -> Otro a -> Otro a
+pana (Otro f) (Otro g) = Otro (\b -> Convive (f b) (g b))
+\end{code}
+
+\noindent
+Si es un chamba, ejecuta lo que esta guardado y sigue por la cadena
+de funciones, sino, agrega o elimina objetos de la lista
+\begin{code}
+vaca :: [Beta] -> IO ()
+vaca [] = return ()
+vaca (Quieto:bs)        = vaca bs
+vaca ((Convive a b):bs) = vaca $ concat [bs, [a, b]]
+vaca ((Chamba x):bs)    = x >>= (\f -> vaca (bs ++ [f]))
+\end{code}
+
+\noindent
+El return devuelve abstrae el x en una funcion que dada una funcion
+que eventualmente recibe, le aplica la clausura, obteniendo asi
+un Otro dependiente de el tipo de x
+
+\noindent
+Para el bind, cambie la firma para que me permitiera obtener la funcion
+del resultado de g, y asi poner combinar ambas funciones
+\begin{code}
+instance Monad Otro where
+  return x       = Otro (\f -> f x)
+  (Otro f) >>= g = Otro (\k -> f (\x -> fromOtro (g x) k))
+\end{code}
+
 \end{document}

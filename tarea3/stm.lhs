@@ -6,7 +6,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Concurrent.MVar
 import Data.Sequence as DS hiding (replicateM)
---import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
+import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
 
 randomSeed :: Int
 randomSeed = 42
@@ -73,10 +73,11 @@ rafita m bowl total stall buffer = do
 parroquiano i counter bowl buffer stall bool = do
 					if bool then
 						do
-							atomically $ put buffer $ "Parroquiano " ++ (show i) ++ " tiene hambre "
+							atomically $ put buffer $ "Parroquiano " ++ (show i) ++ " tiene hambre"
 							comer
 					else
 						comer
+						threadDelay 1
 						
 					where
 						agarrarEmpanada = do

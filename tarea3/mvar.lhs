@@ -4,19 +4,25 @@ import Control.Monad
 import Data.Sequence as DS hiding (replicateM)
 import Control.Concurrent
 import Control.Concurrent.MVar
+import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
 
 randomSeed :: Int
 randomSeed = 42
 
-type Buffer = TVar (DS.Seq String)
-type Bowl = TVar Int	-- Cuantas empanadas hay en el bowl
-type Total = TVar Int
+type Buffer = MVar (DS.Seq String)
+type Bowl = MVar Int	-- Cuantas empanadas hay en el bowl
+type Total = MVar Int
+type Stall = MVar Bool
 
 newCounter :: IO (MVar Int)
 newCounter = newMVar 0
 
+inc x = x + 1
+dec x = x - 1
+incM m x = x + m
+
 newBuffer :: IO (Buffer)
-newBuffer = newTVarIO DS.empty
+newBuffer = newMVar DS.empty
 
 classic :: Int -> Int -> IO ()
 classic m n = do
@@ -24,32 +30,86 @@ classic m n = do
 			bowl <- newCounter
 			total <- newCounter
 			buffer <- newBuffer
-			randomDelay 300000 500000
+			stall <- newMVar True
 			forM_ [1..n] $ (\i ->
-				forkIO $ parroquiano m i (counters !! (i - 1)) bowl total buffer)
-
+				forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
+			forkIO $ rafita m bowl total stall buffer
 			output buffer
+
+output buffer = do
+		str <- takeMVar buffer
+		case viewl str of
+			EmptyL				-> do
+										putMVar buffer str
+										threadDelay 1
+										output buffer
+			item :< rest	-> do
+										putStrLn item
+										putMVar buffer rest
+										output buffer
 
 randomDelay lo hi = do
 				r <- randomRIO (lo,hi)
 				threadDelay r
 
-parroquiano m n bowl selfCounter total buffer = undefined
-
-
-rafita m bowl total buffer = do
-	b <- takeMVar bowl
-	t <- takeMVar total
-	buff <- takeMVar buffer
-	if b > 0 then
+parroquiano :: Int -> Total -> Bowl -> Buffer -> Stall -> Bool -> IO b
+parroquiano i counter bowl buffer stall bool = do
+	if bool then
 		do
-			putMVar buffer (buff |> "Rafita esta cocinando")
-			randomDelay 300000 500000
-			putMVar total $ t + m
-			putMVar bowl $ m
+			buff <- takeMVar buffer
+			putMVar buffer (buff |> ("Parroquiano " ++ (show i) ++ " tiene hambre"))
+			comer
+	else
+		comer
+
+	where
+		agarrarEmpanada = do
+			b <- takeMVar bowl
+			if b > 0 then
+				do
+					c <- takeMVar counter
+					putMVar counter $ c + 1
+					buff <- takeMVar buffer
+					putMVar buffer (buff |> ("Parroquiano " ++ (show i) ++ " come empanada"))
+					putMVar bowl $ b - 1
+			else
+				putMVar bowl 0
+
+		comer = do 
+			pre <- readMVar counter
+			agarrarEmpanada
+			post <- readMVar counter
+			if pre == post then
+				do
+					-- Avisar que quiero comer
+					takeMVar stall
+					putMVar stall False
+					parroquiano i counter bowl buffer stall False
+			else
+				do
+					randomDelay 1000000 7000000
+					parroquiano i counter bowl buffer stall True
+
+
+rafita :: Int -> Bowl -> Total -> Stall -> Buffer -> IO b
+rafita m bowl total stall buffer = forever $ do
+	b <- takeMVar bowl
+	s <- takeMVar stall
+	if b > 0 || s then
+		do
+			putMVar stall s
+			putMVar bowl b
 	else
 		do
-			putMVar total $ t
-			putMVar bowl $ b
+			t <- takeMVar total
+			buff <- takeMVar buffer
+			putMVar buffer (buff |> "Rafita esta cocinando")
+			randomDelay 3000000 5000000
+			buff2 <- takeMVar buffer
+			putMVar buffer (buff |> "Rafita sirvio las empanadas")
+			putMVar total $ t + m
+			putMVar stall True
+			putMVar bowl m
+		
 
 \end{code}

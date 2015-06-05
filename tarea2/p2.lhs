@@ -1,15 +1,8 @@
 \begin{code}
 import Control.Monad
-import Control.Applicative
-import qualified Data.Sequence as Seq
-import qualified Data.Set as DS
-import Data.Char
-import Data.Functor
-import Data.Either
-import Test.QuickCheck
 \end{code}
 \begin{code}
-data Otro a = Otro ((a -> Beta) -> Beta)
+data Otro a = Otro { fromOtro :: ((a -> Beta) -> Beta) }
 
 data Beta = Chamba (IO Beta)
           | Convive Beta Beta
@@ -23,36 +16,41 @@ instance Show Beta where
    show Quieto        = " quieto "
 \end{code}
 
+
+
 \begin{code}
+-- Haces lo que tienes que hacer y sigues...
 hacer :: Otro a -> Beta
-hacer (Otro f) = Convive (\g -> f g) Quieto
+hacer (Otro f) = f (const Quieto)
 
+-- Lista
 quieto :: Otro a
-quieto = Otro (\_ -> Quieto)
+quieto = Otro (const Quieto)
 
+-- Lista
 chambea :: IO a -> Otro a
 chambea x = Otro (\f -> Chamba $ fmap f x)
 
+-- Compartir la fuerza, aunque al final quedas tablas
 convive :: Otro a -> Otro ()
-convive = undefined
+convive o =  Otro (\f -> Convive (hacer o) (f ()))
 
+-- Cada quien busca por su lado...
 pana :: Otro a -> Otro a -> Otro a
 pana (Otro f) (Otro g) = Otro (\b -> Convive (f b) (g b))
 
 vaca :: [Beta] -> IO ()
-vaca [] = putStrLn ""
-vaca (Quieto:xs) = vaca xs
-vaca ((Convive a b):xs) = vaca $ concat [xs, [b], [a]]
-vaca (Chamba x:xs) = x >> vaca xs
+vaca [] = return ()
+vaca (Quieto:bs)        = vaca bs
+vaca ((Convive a b):bs) = vaca $ concat [bs, [a, b]]
+vaca ((Chamba x):bs)    = x >>= (\f -> vaca (bs ++ [f]))
 
 \end{code}
 
-g = (b -> Beta) -> Beta 
-((a -> Beta) -> Beta) -> (a -> ((b -> Beta) -> Beta)) -> ((b -> Beta) -> Beta)
 \begin{code}
 instance Monad Otro where
-  return x       = undefined
-  (Otro f) >>= g = undefined
+  return x       = Otro (\f -> f x)
+  (Otro f) >>= g = Otro (\j -> f (\x -> fromOtro (g x) j))
 
 \end{code}
 
@@ -70,5 +68,5 @@ clavo 42 = "htptuc2"
 clavo 69 = "t:irofr"
 
 dale :: String -> Otro ()
-dale xs = mapM_ (chambea . putChar) xs
+dale = mapM_ (chambea . putChar)
 \end{code}
