@@ -14,6 +14,7 @@ randomSeed = 42
 type Buffer = TVar (DS.Seq String)
 type Bowl = TVar Int	-- Cuantas empanadas hay en el bowl
 type Total = TVar Int
+type Stall = TVar Bool
 
 newCounter :: IO (TVar Int)
 newCounter = newTVarIO 0
@@ -44,63 +45,72 @@ inc x = x + 1
 dec x = x - 1
 incM m x = x + m
 
-rafita :: Int -> STM ()
-rafita = undefined
-
 randomDelay lo hi = do
 						r <- randomRIO (lo,hi)
 						threadDelay r
 
---cocinar :: RandomGen g => g -> Int -> Bowl -> Total -> IO ()
-cocinar m bowl total buffer = do
-					b <- readTVar bowl
-					if b > 0 then
-						return ()
-					else
-						do 
-							writeTVar bowl m
-							put buffer "Rafita esta cocinando"
-							modifyTVar' total (incM m)
-
-
-agarrarEmpanada m bowl counter total buffer str = do
-							b <- readTVar bowl
-							if b > 0 then
-								do
-									writeTVar bowl $ b - 1
-									modifyTVar' counter inc
-									put buffer str
-							else
-								cocinar m bowl total buffer
+rafita ::  Int -> Bowl -> Total -> Stall -> Buffer -> IO ()
+rafita m bowl total stall buffer = do
+						b <- readTVarIO bowl
+						s <- readTVarIO stall
+						if b > 0 || s then 
+							rafita m bowl total stall buffer
+						else
+							do
+								atomically $ writeTVar stall True >> put buffer "Rafita esta cocinando"
+								randomDelay 3000000 5000000
+								atomically $ do
+											modifyTVar' total (incM m)
+											writeTVar bowl m
+											put buffer "Rafita sirvio las empanadas"
+											writeTVar stall True
+								rafita m bowl total stall buffer
 
 
 -- Si un parroquiano tiene hambre, pero no hay empanadas, le avisa a Rafita para que prepare más.
 
 --parroquiano :: Int -> Bowl -> STM ()
-parroquiano m n bowl selfCounter total buffer = do
-					atomically $ put buffer $ "Parroquiano " ++ (show n) ++ " tiene hambre"
-					atomically $ agarrarEmpanada m bowl selfCounter total buffer $ "Parroquiano " ++ (show n) ++ " come empanada" 
-					randomDelay 1000000 7000000
-					atomically $ put buffer $ "Parroquiano " ++ (show n) ++ " bebe"
-					parroquiano m n bowl selfCounter total buffer
-
-
-infinite :: Int -> Int
-infinite 0 = 0
-infinite x = infinite (x - 1)
+parroquiano i counter bowl buffer stall bool = do
+					if bool then
+						do
+							atomically $ put buffer $ "Parroquiano " ++ (show i) ++ " tiene hambre "
+							comer
+					else
+						comer
+						
+					where
+						agarrarEmpanada = do
+							b <- readTVar bowl
+							if b > 0 then
+								do
+									writeTVar bowl $ b - 1
+									modifyTVar' counter inc
+									put buffer $ "Parroquiano " ++ (show i) ++ " come empanada"
+							else
+								return ()
+						comer = do
+							pre <- readTVarIO counter
+							atomically $ agarrarEmpanada
+							post <- readTVarIO counter
+							if pre == post then
+								do 
+									atomically $ writeTVar stall False
+									parroquiano i counter bowl buffer stall False
+							else 
+								do
+									randomDelay 1000000 7000000
+									parroquiano i counter bowl buffer stall True
 
 transactional :: Int -> Int -> IO ()
 transactional m n = do
 					counters <- replicateM n newCounter
 					bowl <- newCounter
 					total <- newCounter
-					stall <- newCounter
+					stall <- newTVarIO True
 					buffer <- newBuffer
-					iszero <- atomically $ readTVar stall
-					randomDelay 300000 500000
 					forM_ [1..n] $ (\i ->
-						forkIO $ parroquiano m i (counters !! (i - 1)) bowl total buffer)
-
+						forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
+					forkIO $ rafita m bowl total stall buffer
 					output buffer
 
 -- Outputs the whole buffer to console
