@@ -8,6 +8,10 @@ import Control.Concurrent.MVar
 randomSeed :: Int
 randomSeed = 42
 
+type Buffer = TVar (DS.Seq String)
+type Bowl = TVar Int	-- Cuantas empanadas hay en el bowl
+type Total = TVar Int
+
 newCounter :: IO (MVar Int)
 newCounter = newMVar 0
 
