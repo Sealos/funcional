@@ -9,17 +9,6 @@ import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
 randomSeed :: Int
 randomSeed = 42
 
-type Buffer = TVar (DS.Seq String)
-type Bowl = TVar Int	-- Cuantas empanadas hay en el bowl
-type Total = TVar Int
-type Stall = TVar Bool
-
-newCounter :: IO (TVar Int)
-newCounter = newTVarIO 0
-
-newBuffer :: IO (Buffer)
-newBuffer = newTVarIO DS.empty
-
 randGen :: StdGen
 randGen = mkStdGen randomSeed
 
@@ -28,11 +17,9 @@ delay seed lo hi = randomR (lo, hi) seed
 
 wait t = threadDelay t
 
-put :: Buffer -> String -> STM ()
 put buffer item = do ls <- readTVar buffer
                      writeTVar buffer (ls |> item)
  
-get :: Buffer -> STM String
 get buffer = do ls <- readTVar buffer
                 case viewl ls of
                   EmptyL       -> retry
@@ -47,7 +34,6 @@ randomDelay lo hi = do
 						r <- randomRIO (lo,hi)
 						threadDelay r
 
-rafita ::  Int -> Bowl -> Total -> Stall -> Buffer -> IO ()
 rafita m bowl total stall buffer = do
 						b <- readTVarIO bowl
 						s <- readTVarIO stall
@@ -104,7 +90,7 @@ parroquiano i counter bowl buffer stall bool = do
 printInfo total counters rTID pTID mTID = do
 	forM_ pTID (\t -> killThread t)
 	killThread rTID
-	buffer <- newBuffer
+	buffer <- newTVarIO DS.empty
 	t <- readTVarIO total
 	cs <- mapM readTVarIO counters
 	putStrLn $ "\n\nRafita preparo " ++ (show t) ++ " empanadas"
@@ -119,11 +105,11 @@ printInfo total counters rTID pTID mTID = do
 transactional :: Int -> Int -> IO ()
 transactional m n = do
 					setStdGen $ mkStdGen randomSeed
-					counters <- replicateM n newCounter
-					bowl <- newCounter
-					total <- newCounter
+					counters <- replicateM n newTVarIO 0
+					bowl <- newTVarIO 0
+					total <- newTVarIO 0
 					stall <- newTVarIO True
-					buffer <- newBuffer
+					buffer <- newTVarIO DS.empty
 					mainTID <- myThreadId
 					parroquianosTID <- forM [1..n] $ (\i ->
 						forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
