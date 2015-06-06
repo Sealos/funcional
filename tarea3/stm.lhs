@@ -1,11 +1,9 @@
 \begin{code}
 import System.Random
 import Control.Monad
-import Data.Sequence as DS hiding (replicateM)
+import Data.Sequence as DS hiding (replicateM, zip)
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Concurrent.MVar
-import Data.Sequence as DS hiding (replicateM)
 import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
 
 randomSeed :: Int
@@ -76,8 +74,9 @@ parroquiano i counter bowl buffer stall bool = do
 							atomically $ put buffer $ "Parroquiano " ++ (show i) ++ " tiene hambre"
 							comer
 					else
-						comer
-						threadDelay 1
+						do
+							comer
+							threadDelay 1
 						
 					where
 						agarrarEmpanada = do
@@ -102,6 +101,21 @@ parroquiano i counter bowl buffer stall bool = do
 									randomDelay 1000000 7000000
 									parroquiano i counter bowl buffer stall True
 
+printInfo total counters rTID pTID mTID = do
+	forM_ pTID (\t -> killThread t)
+	killThread rTID
+	buffer <- newBuffer
+	t <- readTVarIO total
+	cs <- mapM readTVarIO counters
+	putStrLn $ "\n\nRafita preparo " ++ (show t) ++ " empanadas"
+	let ps = zip cs [0..]
+	forM ps (\(c, i)->
+			putStrLn $ "Parroquiano " ++ (show i) ++ ":\t" ++ (show c)
+		)
+	putStrLn $ "Total: " ++ (show $ sum cs)
+
+	--killThread mTID
+
 transactional :: Int -> Int -> IO ()
 transactional m n = do
 					setStdGen $ mkStdGen randomSeed
@@ -110,12 +124,13 @@ transactional m n = do
 					total <- newCounter
 					stall <- newTVarIO True
 					buffer <- newBuffer
-					forM_ [1..n] $ (\i ->
+					mainTID <- myThreadId
+					parroquianosTID <- forM [1..n] $ (\i ->
 						forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
-					forkIO $ rafita m bowl total stall buffer
+					rafitaTID <- forkIO $ rafita m bowl total stall buffer
+					installHandler sigINT (Catch (printInfo total counters rafitaTID parroquianosTID mainTID)) Nothing
 					output buffer
 
--- Outputs the whole buffer to console
 output buffer = 
     do str <- atomically $ get buffer
        putStrLn str

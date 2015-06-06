@@ -4,7 +4,7 @@ import Control.Monad
 import Data.Sequence as DS hiding (replicateM)
 import Control.Concurrent
 import Control.Concurrent.MVar
-import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
+import System.Posix.Signals
 
 randomSeed :: Int
 randomSeed = 42
@@ -24,6 +24,13 @@ incM m x = x + m
 newBuffer :: IO (Buffer)
 newBuffer = newMVar DS.empty
 
+printInfo total counters = do
+	print "Im in"
+	t <- takeMVar total
+	cs <- mapM takeMVar counters
+	print t
+	print cs
+
 classic :: Int -> Int -> IO ()
 classic m n = do
 			counters <- replicateM n newCounter
@@ -33,9 +40,13 @@ classic m n = do
 			stall <- newMVar True
 			forM_ [1..n] $ (\i ->
 				forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
-			forkIO $ rafita m bowl total stall buffer
+			rafitaID <- forkIO $ rafita m bowl total stall buffer
+
+			installHandler sigINT (Catch (printInfo total counters)) Nothing
 			output buffer
 
+
+output :: Buffer -> IO b
 output buffer = do
 		str <- takeMVar buffer
 		case viewl str of
@@ -48,6 +59,7 @@ output buffer = do
 										putMVar buffer rest
 										output buffer
 
+randomDelay :: Int -> Int -> IO ()
 randomDelay lo hi = do
 				r <- randomRIO (lo,hi)
 				threadDelay r
