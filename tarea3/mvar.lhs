@@ -24,12 +24,20 @@ incM m x = x + m
 newBuffer :: IO (Buffer)
 newBuffer = newMVar DS.empty
 
-printInfo total counters = do
-	print "Im in"
-	t <- takeMVar total
-	cs <- mapM takeMVar counters
-	print t
-	print cs
+printInfo total counters rTID pTID mTID = do
+	forM_ pTID (\t -> killThread t)
+	killThread rTID
+	buffer <- newBuffer
+	t <- readTVarIO total
+	cs <- mapM readTVarIO counters
+	putStrLn $ "\n\nRafita preparo " ++ (show t) ++ " empanadas"
+	let ps = zip cs [1..]
+	forM ps (\(c, i)->
+			putStrLn $ "Parroquiano " ++ (show i) ++ ":\t" ++ (show c)
+		)
+	putStrLn $ "Total: " ++ (show $ sum cs)
+
+	--killThread mTID
 
 classic :: Int -> Int -> IO ()
 classic m n = do
@@ -38,11 +46,12 @@ classic m n = do
 			total <- newCounter
 			buffer <- newBuffer
 			stall <- newMVar True
-			forM_ [1..n] $ (\i ->
+			mainTID <- myThreadId
+			parroquianosTID <- forM [1..n] $ (\i ->
 				forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
 			rafitaID <- forkIO $ rafita m bowl total stall buffer
 
-			installHandler sigINT (Catch (printInfo total counters)) Nothing
+			installHandler sigINT (Catch (printInfo total counters rafitaTID parroquianosTID mainTID)) Nothing
 			output buffer
 
 

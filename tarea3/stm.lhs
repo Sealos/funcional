@@ -108,7 +108,7 @@ printInfo total counters rTID pTID mTID = do
 	t <- readTVarIO total
 	cs <- mapM readTVarIO counters
 	putStrLn $ "\n\nRafita preparo " ++ (show t) ++ " empanadas"
-	let ps = zip cs [0..]
+	let ps = zip cs [1..]
 	forM ps (\(c, i)->
 			putStrLn $ "Parroquiano " ++ (show i) ++ ":\t" ++ (show c)
 		)
