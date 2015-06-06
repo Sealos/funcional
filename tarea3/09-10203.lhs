@@ -51,8 +51,6 @@
 \definecolor{darkgrey}{rgb}{0.4,0.4,0.4}
 \definecolor{lightgrey}{rgb}{0.95,0.95,0.95}
 
-
-
 \lstset{
    language=Haskell,
    gobble=0,
@@ -117,12 +115,10 @@ put buffer item = do
 get buffer = do
   ls <- readTVar buffer
   case viewl ls of
-  EmptyL       -> retry
-  item :< rest -> do
-    writeTVar buffer rest
-    return item
-
-
+    EmptyL       -> retry
+    item :< rest -> do
+      writeTVar buffer rest
+      return item
 \end{code}
 }
 
@@ -156,7 +152,7 @@ Luego tenemos al parroquiano, en principio el sólo dirá que tiene hambre una s
 
 
 \begin{code}
-parroquiano i counter bowl buffer stall bool = do
+parroquianoC i counter bowl buffer stall bool = do
   if bool then
     do
       buff <- takeMVar buffer
@@ -186,11 +182,11 @@ parroquiano i counter bowl buffer stall bool = do
         do
           takeMVar stall
           putMVar stall False
-          parroquiano i counter bowl buffer stall False
+          parroquianoC i counter bowl buffer stall False
       else
         do
           randomDelay 1000000 7000000
-          parroquiano i counter bowl buffer stall True
+          parroquianoC i counter bowl buffer stall True
 \end{code}
 
 \pagebreak
@@ -216,14 +212,14 @@ Y la función para inciar la simulación clasica, generamos los MVars para guard
 \begin{code}
 classic m n = do
       setStdGen $ mkStdGen randomSeed
-      counters <- replicateM n newMVar 0
+      counters <- replicateM n $ newMVar 0
       bowl <- newMVar 0
       total <- newMVar 0
       buffer <- newMVar DS.empty
       stall <- newMVar True
       mainTID <- myThreadId
       parroquianosTID <- forM [1..n] $ (\i ->
-        forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
+        forkIO $ parroquianoC i (counters !! (i - 1)) bowl buffer stall True)
       rafitaTID <- forkIO $ rafitaC m bowl total stall buffer
 
       installHandler sigINT (Catch (
@@ -278,7 +274,7 @@ rafitaT m bowl total stall buffer = do
 \noindent
 No hay mucho que explicar, sigue el mismo sentido que en el esquema clásico.
 \begin{code}
-parroquiano i counter bowl buffer stall bool = do
+parroquianoT i counter bowl buffer stall bool = do
   if bool then
     do
       atomically $ put buffer $ "Parroquiano " ++ (show i) ++ " tiene hambre"
@@ -305,11 +301,11 @@ parroquiano i counter bowl buffer stall bool = do
       if pre == post then
         do 
           atomically $ writeTVar stall False
-          parroquiano i counter bowl buffer stall False
+          parroquianoT i counter bowl buffer stall False
       else 
         do
           randomDelay 1000000 7000000
-          parroquiano i counter bowl buffer stall True
+          parroquianoT i counter bowl buffer stall True
 \end{code}
 
 \noindent
@@ -327,14 +323,14 @@ Y para iniciar la simulación es casi que lo mismo.
 \begin{code}
 transactional m n = do
   setStdGen $ mkStdGen randomSeed
-  counters <- replicateM n newTVarIO 0
+  counters <- replicateM n $ newTVarIO 0
   bowl <- newTVarIO 0
   total <- newTVarIO 0
   stall <- newTVarIO True
   buffer <- newTVarIO DS.empty
   mainTID <- myThreadId
   parroquianosTID <- forM [1..n] $ (\i ->
-    forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
+    forkIO $ parroquianoT i (counters !! (i - 1)) bowl buffer stall True)
   rafitaTID <- forkIO $ rafitaT m bowl total stall buffer
   installHandler sigINT (Catch (
     printInfoT total counters rafitaTID parroquianosTID mainTID)) Nothing
