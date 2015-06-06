@@ -1,7 +1,7 @@
 \begin{code}
 import System.Random
 import Control.Monad
-import Data.Sequence as DS hiding (replicateM)
+import Data.Sequence as DS hiding (replicateM, zip)
 import Control.Concurrent
 import Control.Concurrent.MVar
 import System.Posix.Signals
@@ -25,11 +25,12 @@ newBuffer :: IO (Buffer)
 newBuffer = newMVar DS.empty
 
 printInfo total counters rTID pTID mTID = do
+	buffer <- newBuffer
+	t <- readMVar total
+	cs <- mapM readMVar counters
 	forM_ pTID (\t -> killThread t)
 	killThread rTID
-	buffer <- newBuffer
-	t <- readTVarIO total
-	cs <- mapM readTVarIO counters
+	threadDelay 200000
 	putStrLn $ "\n\nRafita preparo " ++ (show t) ++ " empanadas"
 	let ps = zip cs [1..]
 	forM ps (\(c, i)->
@@ -37,7 +38,7 @@ printInfo total counters rTID pTID mTID = do
 		)
 	putStrLn $ "Total: " ++ (show $ sum cs)
 
-	--killThread mTID
+	killThread mTID
 
 classic :: Int -> Int -> IO ()
 classic m n = do
@@ -49,7 +50,7 @@ classic m n = do
 			mainTID <- myThreadId
 			parroquianosTID <- forM [1..n] $ (\i ->
 				forkIO $ parroquiano i (counters !! (i - 1)) bowl buffer stall True)
-			rafitaID <- forkIO $ rafita m bowl total stall buffer
+			rafitaTID <- forkIO $ rafita m bowl total stall buffer
 
 			installHandler sigINT (Catch (printInfo total counters rafitaTID parroquianosTID mainTID)) Nothing
 			output buffer
