@@ -1,11 +1,13 @@
 \begin{code}
 {-# LANGUAGE BangPatterns #-}
 import Data.Word (Word8, Word32)
---import Graphics.UI.SDL as SDL
---import Ix
+import Ix
 import Control.Parallel.Strategies
 import Control.Parallel
 import Prelude
+import Control.Monad.Identity
+import Data.Array.Repa
+import System.Environment
 
 type Complex = (Double, Double)
 
@@ -46,7 +48,7 @@ toComplex c (x, y) = scale c (f x, f y)
 		f = fromIntegral
 
 mandelStrat :: Word32 -> Word32 -> [[Word8]]
-mandelStrat w h = parMap rdeepseq (parMap rpar converge) mv
+mandelStrat w h = parMap rpar (parMap rdeepseq converge) mv
 	where
 		l = makeList w h
 		mv = map (map (toComplex (fromIntegral w, fromIntegral h))) l
