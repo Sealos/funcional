@@ -1,28 +1,28 @@
 \begin{code}
 {-# LANGUAGE BangPatterns #-}
 import Data.Word (Word8, Word32)
-import Graphics.UI.SDL as SDL
-import Ix
+--import Graphics.UI.SDL as SDL
+--import Ix
+import Control.Parallel.Strategies
+import Control.Parallel
+import Prelude
 
 type Complex = (Double, Double)
-
-screenSize :: Complex
-screenSize = (1024, 768)
 
 scaleVal :: Double -> Double -> Double
 scaleVal a v = (a - v') * 2 / v'
 				where
 					v' = v / 2
 
-scale :: Complex -> Complex
-scale (a, b) = (a', b')
+scale :: Complex -> Complex -> Complex
+scale f (a, b) = (a', b')
 			where
-				(x, y) = screenSize
+				(x, y) = f
 				a' = scaleVal a x
 				b' = scaleVal b y
 
 converge :: Complex -> Word8
-converge x = convergeIt 0 (0, 0) $ scale x
+converge x = convergeIt 0 (0, 0) x
 
 convergeIt :: Word8 -> Complex -> Complex -> Word8
 convergeIt 255 _	_					=	255
@@ -34,8 +34,22 @@ convergeIt !n (a, b) (x, y)	=	if a*a + b*b > 4 then
 																nr = a*a - b*b + x
 									 							ni = 2*a*b + y
 
+makeList :: Word32 -> Word32 -> [[(Word32, Word32)]]
+makeList a b = foldl (\l e -> (zip (repeat e) ys):l) [] xs
+	where
+		xs = [0..a]
+		ys = [0..b]
+
+toComplex :: Complex -> (Word32, Word32) -> Complex
+toComplex c (x, y) = scale c (f x, f y)
+	where
+		f = fromIntegral
+
 mandelStrat :: Word32 -> Word32 -> [[Word8]]
-mandelStrat = undefined
+mandelStrat w h = parMap rdeepseq (parMap rpar converge) mv
+	where
+		l = makeList w h
+		mv = map (map (toComplex (fromIntegral w, fromIntegral h))) l
 
 mandelPar   :: Word32 -> Word32 -> [[Word8]]
 mandelPar = undefined
@@ -56,7 +70,7 @@ mandelREPA = undefined
       G.getKey window
       G.closeWindow window-}
 
-
+{-
 createColor screen r g b = SDL.mapRGB (SDL.surfaceGetPixelFormat screen) r g b
 
 main = do
@@ -78,5 +92,5 @@ drawPixel surf (x, y) = do
 
 -- Apply drawPixel to each coordinate on the screen
 drawGrad screen = mapM_ (drawPixel screen) $ range ((0,0), screenSize)
-
+-}
 \end{code}
