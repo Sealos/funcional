@@ -231,7 +231,7 @@ main = defaultMain [
     \end{tabular}
 \end{center}
 \begin{center}
-  \includegraphics[scale=0.5]{file.png}
+	\includegraphics[scale=0.5]{file.png}
 \end{center}
 
 
